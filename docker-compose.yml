@@ -13,7 +13,7 @@ services:
       - ./backend/paddleocr_models:/root/.paddleocr
     environment:
       - PYTHONUNBUFFERED=1
-      - DATABASE_URL=sqlite:///./sql_app.db
+      - DATABASE_URL=sqlite:///./data/sql_app.db
       - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
       - YOLO_MODEL_PATH=yolov8n.pt
       - YOLO_CONF_THRESHOLD=0.25

@@ -323,16 +323,16 @@ async def process_video_real(video_path: str, websocket_manager):
                             plate_crop = frame[crop_y1:y2, x1:x2]
                             
                             if plate_crop.size > 0:
-                                ocr_result = ocr.ocr(plate_crop, cls=False)
-                                if ocr_result and ocr_result[0]:
-                                    texts = [line[1][0] for line in ocr_result[0] if line[1][1] > 0.4]
-                                    if texts:
-                                        raw_text = "".join(texts).replace(" ", "").upper()
-                                        raw_text = ''.join(c for c in raw_text if c.isalnum())
-                                        if len(raw_text) >= 4:
-                                            plate_number = raw_text
+                                ocr_res = ocr.ocr(plate_crop, cls=True)
+                                print(f"[OCR RAW] Frame {frame_count}: {ocr_res}")
+                                if ocr_res and ocr_res[0]:
+                                    candidate = ocr_res[0][0][1][0]
+                                    conf = ocr_res[0][0][1][1]
+                                    print(f"[OCR DEBUG] Frame {frame_count}: Found '{candidate}' (conf={conf:.3f})")
+                                    if conf > 0.6:
+                                        plate_number = candidate
                         except Exception as e:
-                            print(f"[Pipeline] OCR Error: {e}")
+                            print(f"[Pipeline] OCR error: {e}")
                             
                     # Check if THIS specific motorcycle was already flagged recently
                     last_violation_data = flagged_motos.get(moto_id, (-999, "UNREADABLE"))
