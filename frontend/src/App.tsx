@@ -17,15 +17,7 @@ interface Violation {
   timestamp: string;
 }
 
-interface Benchmarks {
-  mAP_50: number;
-  mAP_50_95: number;
-  precision: number;
-  recall: number;
-  f1_score: number;
-  fps_video: number;
-  processing_time_per_image_ms: number;
-}
+
 
 const COLORS = ['#ef4444', '#f97316', '#eab308'];
 
@@ -34,9 +26,9 @@ function App() {
   const [violations, setViolations] = useState<Violation[]>([]);
   const [wsConnected, setWsConnected] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  const [stopLineY, setStopLineY] = useState<string>('');
   const [statusMsg, setStatusMsg] = useState<string>('Idle — upload a video or image to begin');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [benchmarks, setBenchmarks] = useState<Benchmarks | null>(null);
   const ws = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttempts = useRef(0);
@@ -94,13 +86,6 @@ function App() {
     };
   }, [connectWebSocket]);
 
-  useEffect(() => {
-    fetch(`${API_BASE}/api/benchmarks`)
-      .then(res => res.json())
-      .then(data => setBenchmarks(data))
-      .catch(err => console.error("Could not load benchmarks", err));
-  }, []);
-
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
@@ -110,6 +95,9 @@ function App() {
 
       const formData = new FormData();
       formData.append('file', selectedFile);
+      if (stopLineY) {
+        formData.append('stop_line_y', stopLineY);
+      }
 
       const isImage = selectedFile.type.startsWith('image/');
       const endpoint = isImage ? '/api/upload-image' : '/api/upload-video';
@@ -206,7 +194,7 @@ function App() {
           onClick={() => setActiveTab('evaluation')}
           className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === 'evaluation' ? 'border-blue-500 text-blue-400' : 'border-transparent text-slate-400 hover:text-slate-300'}`}
         >
-          <AlertTriangle className="w-4 h-4" /> Evaluation & Benchmarks
+          <AlertTriangle className="w-4 h-4" /> System Architecture
         </button>
       </div>
 
@@ -221,6 +209,13 @@ function App() {
                   accept="video/mp4,image/jpeg,image/png" 
                   onChange={handleFileUpload}
                   className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 mb-4 cursor-pointer"
+                />
+                <input
+                  type="number"
+                  placeholder="Stop Line Y Coordinate (optional)"
+                  value={stopLineY}
+                  onChange={(e) => setStopLineY(e.target.value)}
+                  className="block w-full max-w-xs mx-auto mb-4 bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-sm"
                 />
                 {file ? (
                   <p className="text-slate-300">Selected: {file.name}</p>
@@ -329,90 +324,65 @@ function App() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 h-96">
+            <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 h-96 flex flex-col">
               <h3 className="text-lg font-semibold text-white mb-4">Violations by Type</h3>
               {violations.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={barData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                    <XAxis dataKey="name" stroke="#94a3b8" />
-                    <YAxis stroke="#94a3b8" />
-                    <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', color: '#fff' }} />
-                    <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                <div className="flex-1 min-h-0 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={barData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                      <XAxis dataKey="name" stroke="#94a3b8" />
+                      <YAxis stroke="#94a3b8" />
+                      <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', color: '#fff' }} />
+                      <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
               ) : (
-                <div className="text-slate-500 h-full flex items-center justify-center">No data available</div>
+                <div className="text-slate-500 flex-1 flex items-center justify-center">No data available</div>
               )}
             </div>
 
-            <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 h-96">
+            <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 h-96 flex flex-col">
               <h3 className="text-lg font-semibold text-white mb-4">Severity Breakdown</h3>
               {violations.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={5} dataKey="value">
-                      {pieData.map((_, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', color: '#fff' }} />
-                    <Legend />
-                  </PieChart>
-                </ResponsiveContainer>
+                <div className="flex-1 min-h-0 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={pieData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={5} dataKey="value">
+                        {pieData.map((_, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', color: '#fff' }} />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
               ) : (
-                <div className="text-slate-500 h-full flex items-center justify-center">No data available</div>
+                <div className="text-slate-500 flex-1 flex items-center justify-center">No data available</div>
               )}
             </div>
           </div>
         </div>
       )}
 
-      {activeTab === 'evaluation' && benchmarks && (
+      {activeTab === 'evaluation' && (
         <div className="space-y-6 animate-in fade-in max-w-4xl mx-auto">
           <div className="bg-slate-800 p-8 rounded-xl border border-slate-700">
-            <h2 className="text-2xl font-bold text-white mb-6 border-b border-slate-700 pb-4">Performance Benchmarks</h2>
+            <h2 className="text-2xl font-bold text-white mb-6 border-b border-slate-700 pb-4">System Architecture & Scalability</h2>
+            
             <p className="text-slate-400 mb-8">
-              Evaluation metrics based on the provided hackathon testing dataset. Model was assessed for multi-class detection (Triple Riding, Helmet Non-compliance, Illegal Parking).
+              The ViolationVision MVP is built using a modern, scalable architecture designed for real-time edge processing and high-throughput traffic monitoring.
             </p>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-              <div className="bg-slate-900 p-4 rounded-lg border border-slate-700/50 flex flex-col items-center justify-center text-center">
-                <span className="text-slate-400 text-sm mb-1">mAP@50</span>
-                <span className="text-3xl font-bold text-blue-400">{benchmarks.mAP_50}%</span>
-              </div>
-              <div className="bg-slate-900 p-4 rounded-lg border border-slate-700/50 flex flex-col items-center justify-center text-center">
-                <span className="text-slate-400 text-sm mb-1">mAP@50:95</span>
-                <span className="text-3xl font-bold text-blue-400">{benchmarks.mAP_50_95}%</span>
-              </div>
-              <div className="bg-slate-900 p-4 rounded-lg border border-slate-700/50 flex flex-col items-center justify-center text-center">
-                <span className="text-slate-400 text-sm mb-1">Precision</span>
-                <span className="text-3xl font-bold text-green-400">{benchmarks.precision}%</span>
-              </div>
-              <div className="bg-slate-900 p-4 rounded-lg border border-slate-700/50 flex flex-col items-center justify-center text-center">
-                <span className="text-slate-400 text-sm mb-1">Recall</span>
-                <span className="text-3xl font-bold text-orange-400">{benchmarks.recall}%</span>
-              </div>
-            </div>
-
-            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-6">
                <div className="bg-slate-900 p-6 rounded-lg border border-slate-700/50">
-                  <h3 className="text-lg font-semibold text-white mb-2">Computational Efficiency</h3>
-                  <div className="flex justify-between items-center py-2 border-b border-slate-800">
-                    <span className="text-slate-400">Video Processing FPS</span>
-                    <span className="font-mono text-white">{benchmarks.fps_video} FPS</span>
-                  </div>
-                  <div className="flex justify-between items-center py-2">
-                    <span className="text-slate-400">Single Image Inference</span>
-                    <span className="font-mono text-white">{benchmarks.processing_time_per_image_ms} ms</span>
-                  </div>
-               </div>
-               <div className="bg-slate-900 p-6 rounded-lg border border-slate-700/50">
-                  <h3 className="text-lg font-semibold text-white mb-2">System Scalability</h3>
-                  <ul className="text-sm text-slate-400 space-y-2 list-disc pl-4">
-                    <li>Asynchronous Video Chunking</li>
-                    <li>ThreadPoolExecutor for non-blocking ML inferences</li>
-                    <li>WebSocket multiplexing for multiple dashboard clients</li>
-                    <li>Dockerized deployment strategy</li>
+                  <h3 className="text-lg font-semibold text-white mb-4">Core Infrastructure</h3>
+                  <ul className="text-sm text-slate-400 space-y-3 list-disc pl-4">
+                    <li><strong>Asynchronous Video Chunking</strong>: Ensures massive files can be processed without blocking or memory exhaustion.</li>
+                    <li><strong>ThreadPoolExecutor</strong>: Offloads heavy YOLOv8 and PaddleOCR ML inferences to prevent the async event loop from freezing.</li>
+                    <li><strong>WebSocket Multiplexing</strong>: Real-time broadcast engine that efficiently pushes live violations to connected dashboard clients.</li>
+                    <li><strong>Dockerized Deployment</strong>: Containerized strategy ensuring cross-platform consistency and simplified scaling.</li>
                   </ul>
                </div>
             </div>

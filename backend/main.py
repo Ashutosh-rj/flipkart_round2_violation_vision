@@ -1,5 +1,5 @@
 import asyncio
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, UploadFile, File
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import StreamingResponse
@@ -63,7 +63,7 @@ app.mount("/api/images", StaticFiles(directory="uploads"), name="images")
 _background_tasks: set[asyncio.Task] = set()
 
 @app.post("/api/upload-video")
-async def upload_video(file: UploadFile = File(...)):
+async def upload_video(file: UploadFile = File(...), stop_line_y: int = Form(None)):
     file_location = f"uploads/{file.filename}"
 
     # Chunked file copy to avoid loading entire video into RAM
@@ -71,21 +71,21 @@ async def upload_video(file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, file_object)
 
     # Start background processing — store task reference to prevent GC
-    task = asyncio.create_task(process_video_real(file_location, manager))
+    task = asyncio.create_task(process_video_real(file_location, manager, stop_line_y))
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
 
     return {"info": f"file '{file.filename}' saved and processing started."}
 
 @app.post("/api/upload-image")
-async def upload_image(file: UploadFile = File(...)):
+async def upload_image(file: UploadFile = File(...), stop_line_y: int = Form(None)):
     file_location = f"uploads/{file.filename}"
 
     with open(file_location, "wb") as file_object:
         shutil.copyfileobj(file.file, file_object)
 
     # Images process synchronously and return violations immediately
-    violations = await process_image_real(file_location)
+    violations = await process_image_real(file_location, stop_line_y)
     return {"info": f"file '{file.filename}' processed.", "violations": violations}
 
 @app.websocket("/ws/alerts")
@@ -153,17 +153,4 @@ def export_violations_csv(db: Session = Depends(get_db)):
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=violations_report.csv"}
     )
-
-@app.get("/api/benchmarks")
-def get_benchmarks():
-    """Return mock benchmark metrics for the evaluation page."""
-    return {
-        "mAP_50": 87.4,
-        "mAP_50_95": 62.1,
-        "precision": 89.2,
-        "recall": 85.7,
-        "f1_score": 87.4,
-        "fps_video": 34.2,
-        "processing_time_per_image_ms": 112
-    }
 

@@ -26,7 +26,6 @@ from config import (
     SEVERITY_CRITICAL_RIDER_COUNT,
     SEVERITY_MAJOR_CONFIDENCE,
     TARGET_PROCESSING_FPS,
-    STOP_LINE_Y,
     TRAFFIC_LIGHT_STATE,
     TRAFFIC_FLOW_DIRECTION,
 )
@@ -237,7 +236,7 @@ def extract_plate(frame, moto_box):
     return "UNREADABLE"
 
 
-async def process_image_real(image_path: str):
+async def process_image_real(image_path: str, stop_line_y: int | None = None):
     """
     Process a single image for violations (Hackathon requirement)
     """
@@ -350,6 +349,7 @@ async def process_image_real(image_path: str):
                     confidence=comp_conf,
                     image_url=f"/api/images/{filename}"
                 )
+                setattr(v_record, "detection_method", "heuristic")
                 db.add(v_record)
                 violations_found.append(v_record)
                     
@@ -378,18 +378,19 @@ async def process_image_real(image_path: str):
                     confidence=v_conf,
                     image_url=f"/api/images/{filename}"
                 )
+                setattr(v_record, "detection_method", "heuristic")
                 db.add(v_record)
                 violations_found.append(v_record)
             
             # Stop-line / Red-light check (Static image mock)
-            # If the vehicle bottom crosses the STOP_LINE_Y and traffic is RED
-            if vy2 > STOP_LINE_Y and TRAFFIC_LIGHT_STATE == "RED":
-                v_type = "Red-light Violation" if vy2 > STOP_LINE_Y + 100 else "Stop-line Violation"
+            # If the vehicle bottom crosses the stop_line_y and traffic is RED
+            if stop_line_y is not None and vy2 > stop_line_y and TRAFFIC_LIGHT_STATE == "RED":
+                v_type = "Red-light Violation" if vy2 > stop_line_y + 100 else "Stop-line Violation"
                 severity = classify_severity(v_type, 0, v_conf)
                 annotated_sl = enhanced_frame.copy()
                 
                 # Draw virtual stop line
-                cv2.line(annotated_sl, (0, STOP_LINE_Y), (annotated_sl.shape[1], STOP_LINE_Y), (0, 0, 255), 2)
+                cv2.line(annotated_sl, (0, stop_line_y), (annotated_sl.shape[1], stop_line_y), (0, 0, 255), 2)
                 cv2.rectangle(annotated_sl, (vx1, vy1), (vx2, vy2), (255, 0, 0), 3)
                 cv2.putText(annotated_sl, v_type, (vx1, vy1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
                 
@@ -423,7 +424,7 @@ async def process_image_real(image_path: str):
         db.close()
 
 
-async def process_video_real(video_path: str, websocket_manager):
+async def process_video_real(video_path: str, websocket_manager, stop_line_y: int | None = None):
     db = SessionLocal()
     frames_processed = 0
     total_violations = 0
@@ -510,7 +511,8 @@ async def process_video_real(video_path: str, websocket_manager):
                     if mid in used_mids: continue
                     time_diff = current_video_time - ft
                     if time_diff > 15.0: continue
-                    dynamic_max_dist = base_max_dist + (time_diff * 200.0)
+                    # Substantially increase dynamic search radius for robust tracking
+                    dynamic_max_dist = max(base_max_dist + (time_diff * 800.0), 800.0)
                     dist = ((moto_cx - fcx) ** 2 + (moto_cy - fcy) ** 2) ** 0.5
                     if dist < best_dist and dist < dynamic_max_dist:
                         best_dist = dist
@@ -539,7 +541,7 @@ async def process_video_real(video_path: str, websocket_manager):
                     if time_diff > 15.0: continue
                     dist = ((vcx - vdata['cx']) ** 2 + (vcy - vdata['cy']) ** 2) ** 0.5
                     # Larger search radius for cars
-                    if dist < best_dist and dist < 300: 
+                    if dist < best_dist and dist < 1000:
                         best_dist = dist
                         best_id = vid
 
@@ -565,7 +567,7 @@ async def process_video_real(video_path: str, websocket_manager):
                     # Check if already alerted
                     is_duplicate = False
                     for (v_time, v_id_recorded, v_type) in recent_violations:
-                        if v_type == "Illegal Parking" and v_id_recorded == vid and current_video_time - v_time <= VIOLATION_COOLDOWN_SECONDS:
+                        if v_type == "Illegal Parking" and current_video_time - v_time <= VIOLATION_COOLDOWN_SECONDS:
                             is_duplicate = True
                             break
                     
@@ -607,7 +609,7 @@ async def process_video_real(video_path: str, websocket_manager):
                 
                 # Check Seatbelt
                 if not check_seatbelt(frame, vdata['box']):
-                    is_dup = any((v_type == "Seatbelt Non-compliance" and v_id_recorded == vid and current_video_time - vt <= VIOLATION_COOLDOWN_SECONDS) for vt, v_id_recorded, v_type in recent_violations)
+                    is_dup = any((v_type == "Seatbelt Non-compliance" and current_video_time - vt <= VIOLATION_COOLDOWN_SECONDS) for vt, v_id_recorded, v_type in recent_violations)
                     if not is_dup:
                         recent_violations.append((current_video_time, vid, "Seatbelt Non-compliance"))
                         severity = classify_severity("Seatbelt Non-compliance", 0, v_conf)
@@ -631,7 +633,8 @@ async def process_video_real(video_path: str, websocket_manager):
                         await websocket_manager.broadcast({
                             "type": "violation", "violation_type": "Seatbelt Non-compliance", "severity": severity,
                             "plate_number": plate_number, "confidence": float(v_conf), "rider_count": 0,
-                            "image_url": f"/api/images/{filename}", "timestamp": timestamp_dt.isoformat()
+                            "image_url": f"/api/images/{filename}", "timestamp": timestamp_dt.isoformat(),
+                            "detection_method": "heuristic"
                         })
 
                 # Check Wrong-side driving
@@ -657,7 +660,7 @@ async def process_video_real(video_path: str, websocket_manager):
                 elif dynamic_flow_direction == "up" and movement_y > 50:
                     is_wrong_side = True
                 if is_wrong_side:
-                    is_dup = any((v_type == "Wrong-side Driving" and v_id_recorded == vid and current_video_time - vt <= VIOLATION_COOLDOWN_SECONDS) for vt, v_id_recorded, v_type in recent_violations)
+                    is_dup = any((v_type == "Wrong-side Driving" and current_video_time - vt <= VIOLATION_COOLDOWN_SECONDS) for vt, v_id_recorded, v_type in recent_violations)
                     if not is_dup:
                         recent_violations.append((current_video_time, vid, "Wrong-side Driving"))
                         severity = classify_severity("Wrong-side Driving", 0, v_conf)
@@ -686,10 +689,10 @@ async def process_video_real(video_path: str, websocket_manager):
 
                 # Check Stop-line & Red-light
                 # We assume the vehicle crosses the horizontal line from above (y increases).
-                if TRAFFIC_LIGHT_STATE == "RED":
-                    if vy2 > STOP_LINE_Y:
-                        v_type = "Red-light Violation" if vy2 > STOP_LINE_Y + 100 else "Stop-line Violation"
-                        is_dup = any((vt_type == v_type and v_id_recorded == vid and current_video_time - vt <= VIOLATION_COOLDOWN_SECONDS) for vt, v_id_recorded, vt_type in recent_violations)
+                if stop_line_y is not None and TRAFFIC_LIGHT_STATE == "RED":
+                    if vy2 > stop_line_y:
+                        v_type = "Red-light Violation" if vy2 > stop_line_y + 100 else "Stop-line Violation"
+                        is_dup = any((vt_type == v_type and current_video_time - vt <= VIOLATION_COOLDOWN_SECONDS) for vt, v_id_recorded, vt_type in recent_violations)
                         
                         if not is_dup:
                             recent_violations.append((current_video_time, vid, v_type))
@@ -700,7 +703,7 @@ async def process_video_real(video_path: str, websocket_manager):
                             filepath = os.path.join("uploads", filename)
                             
                             annotated = enhanced_frame.copy()
-                            cv2.line(annotated, (0, STOP_LINE_Y), (annotated.shape[1], STOP_LINE_Y), (0, 0, 255), 2)
+                            cv2.line(annotated, (0, stop_line_y), (annotated.shape[1], stop_line_y), (0, 0, 255), 2)
                             cv2.rectangle(annotated, (vx1, vy1), (vx2, vy2), (255, 0, 0), 3)
                             cv2.putText(annotated, f"{v_type} | {severity}", (vx1, vy1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 0), 2)
                             cv2.imwrite(filepath, annotated)
@@ -734,7 +737,7 @@ async def process_video_real(video_path: str, websocket_manager):
                 # Triple Riding
                 if rider_count >= TRIPLE_RIDING_THRESHOLD:
                     plate_number = extract_plate(frame, moto_box)
-                    is_duplicate = any((v_type == "Triple Riding" and v_id_recorded == moto_id and current_video_time - vt <= VIOLATION_COOLDOWN_SECONDS) for vt, v_id_recorded, v_type in recent_violations)
+                    is_duplicate = any((v_type == "Triple Riding" and current_video_time - vt <= VIOLATION_COOLDOWN_SECONDS) for vt, v_id_recorded, v_type in recent_violations)
                     
                     if not is_duplicate:
                         recent_violations.append((current_video_time, moto_id, "Triple Riding"))
@@ -777,7 +780,7 @@ async def process_video_real(video_path: str, websocket_manager):
                 if no_helmet_riders:
                     plate_number = extract_plate(frame, moto_box)
                     # Avoid duplicate helmet alerts for the same motorcycle quickly
-                    is_duplicate = any((v_type == "Helmet Non-compliance" and v_id_recorded == moto_id and current_video_time - vt <= VIOLATION_COOLDOWN_SECONDS) for vt, v_id_recorded, v_type in recent_violations)
+                    is_duplicate = any((v_type == "Helmet Non-compliance" and current_video_time - vt <= VIOLATION_COOLDOWN_SECONDS) for vt, v_id_recorded, v_type in recent_violations)
                     
                     if not is_duplicate:
                         recent_violations.append((current_video_time, moto_id, "Helmet Non-compliance"))
@@ -812,7 +815,8 @@ async def process_video_real(video_path: str, websocket_manager):
                         await websocket_manager.broadcast({
                             "type": "violation", "violation_type": "Helmet Non-compliance", "severity": severity,
                             "plate_number": plate_number, "confidence": float(comp_conf), "rider_count": len(no_helmet_riders),
-                            "image_url": f"/api/images/{filename}", "timestamp": timestamp_dt.isoformat()
+                            "image_url": f"/api/images/{filename}", "timestamp": timestamp_dt.isoformat(),
+                            "detection_method": "heuristic"
                         })
 
             db.commit()

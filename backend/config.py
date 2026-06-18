@@ -58,11 +58,10 @@ SEVERITY_MAJOR_CONFIDENCE = 0.7
 
 # ── Frame Sampling ────────────────────────────────────────────────────
 # Target frames per second to process (independent of source FPS)
-TARGET_PROCESSING_FPS = 3
+TARGET_PROCESSING_FPS = 45
 
 # ── Virtual Traffic Environment (Hackathon Mock Constants) ───────────
 # For Stop-line and Red-light violations
-STOP_LINE_Y = 400
 TRAFFIC_LIGHT_STATE = os.getenv("TRAFFIC_LIGHT_STATE", "RED") # RED or GREEN
 
 # For Wrong-side driving
