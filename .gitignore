@@ -71,6 +71,7 @@ frontend/dist/
 
 # ML Models
 backend/yolov8n.pt
+backend/helmet_model.pt
 backend/paddleocr_models/
 __pycache__/
 
@@ -78,3 +79,9 @@ __pycache__/
 *.pdmodel
 *.pdiparams
 *.tar
+
+# Binaries
+cloudflared.exe
+
+# Backups
+backend/ml_pipeline_backup.py
