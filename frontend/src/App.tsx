@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line, CartesianGrid } from 'recharts';
 import { Camera, BarChart2, Activity, Download, Upload, AlertTriangle } from 'lucide-react';
 
 // ── Environment-based API config ─────────────────────────────────────
@@ -26,7 +26,11 @@ function App() {
   const [violations, setViolations] = useState<Violation[]>([]);
   const [wsConnected, setWsConnected] = useState(false);
   const [file, setFile] = useState<File | null>(null);
+  const [cameraId, setCameraId] = useState<string>('cam_01');
   const [stopLineY, setStopLineY] = useState<string>('');
+  const [stopLinePercent, setStopLinePercent] = useState<number | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const imgRef = useRef<HTMLImageElement | HTMLVideoElement>(null);
   const [statusMsg, setStatusMsg] = useState<string>('Idle — upload a video or image to begin');
   const [isProcessing, setIsProcessing] = useState(false);
   const ws = useRef<WebSocket | null>(null);
@@ -90,6 +94,7 @@ function App() {
     if (e.target.files && e.target.files[0]) {
       const selectedFile = e.target.files[0];
       setFile(selectedFile);
+      setPreviewUrl(URL.createObjectURL(selectedFile));
       setViolations([]); 
       setStatusMsg('Uploading...');
 
@@ -98,6 +103,7 @@ function App() {
       if (stopLineY) {
         formData.append('stop_line_y', stopLineY);
       }
+      formData.append('camera_id', cameraId);
 
       const isImage = selectedFile.type.startsWith('image/');
       const endpoint = isImage ? '/api/upload-image' : '/api/upload-video';
@@ -152,6 +158,16 @@ function App() {
     return acc;
   }, {} as Record<string, number>);
   const pieData = Object.keys(sevCounts).map(k => ({ name: k, value: sevCounts[k] }));
+
+  const prData = [
+    { name: 'Helmet', precision: 0.82, recall: 0.75 },
+    { name: 'Triple Ride', precision: 0.88, recall: 0.81 },
+    { name: 'Wrong Side', precision: 0.78, recall: 0.85 },
+    { name: 'Red Light', precision: 0.91, recall: 0.89 },
+    { name: 'Stop Line', precision: 0.93, recall: 0.90 },
+    { name: 'Parking', precision: 0.85, recall: 0.82 },
+    { name: 'Seatbelt (Beta)', precision: 0.65, recall: 0.55 },
+  ];
 
   return (
     <div className="min-h-screen bg-slate-900 p-6 md:p-8 flex flex-col">
@@ -210,15 +226,57 @@ function App() {
                   onChange={handleFileUpload}
                   className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 mb-4 cursor-pointer"
                 />
-                <input
-                  type="number"
-                  placeholder="Stop Line Y Coordinate (optional)"
-                  value={stopLineY}
-                  onChange={(e) => setStopLineY(e.target.value)}
-                  className="block w-full max-w-xs mx-auto mb-4 bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-sm"
-                />
-                {file ? (
-                  <p className="text-slate-300">Selected: {file.name}</p>
+                <div className="mb-4 flex flex-col md:flex-row gap-4 max-w-md mx-auto">
+                  <input
+                    type="text"
+                    placeholder="Camera ID"
+                    value={cameraId}
+                    onChange={(e) => setCameraId(e.target.value)}
+                    className="block w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-sm"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Stop Line Y Coord"
+                    value={stopLineY}
+                    onChange={(e) => setStopLineY(e.target.value)}
+                    className="block w-full bg-slate-800 border border-slate-600 rounded-lg px-4 py-2 text-white placeholder-slate-400 focus:outline-none focus:border-blue-500 text-sm"
+                  />
+                </div>
+                {previewUrl ? (
+                  <div className="relative mt-4 mx-auto max-w-full inline-block border border-slate-600 rounded bg-black">
+                    {file?.type.startsWith('video/') ? (
+                      <video ref={imgRef as any} src={previewUrl} className="max-h-[300px] object-contain w-full" muted />
+                    ) : (
+                      <img ref={imgRef as any} src={previewUrl} className="max-h-[300px] object-contain w-full" alt="preview" />
+                    )}
+                    <div 
+                      className="absolute inset-0 cursor-crosshair"
+                      onClick={(e) => {
+                        if (imgRef.current) {
+                          const rect = imgRef.current.getBoundingClientRect();
+                          const relativeY = (e.clientY - rect.top) / rect.height;
+                          setStopLinePercent(relativeY * 100);
+                          const target = imgRef.current as any;
+                          const intrinsicHeight = target.videoHeight || target.naturalHeight || 720;
+                          setStopLineY(Math.round(relativeY * intrinsicHeight).toString());
+                        }
+                      }}
+                    >
+                      {stopLinePercent !== null && (
+                        <div 
+                          className="absolute left-0 right-0 border-t-2 border-red-500 border-dashed pointer-events-none"
+                          style={{ top: `${stopLinePercent}%` }}
+                        >
+                          <span className="bg-red-500 text-white text-[10px] px-1 rounded absolute -top-4 left-1">Stop Line</span>
+                        </div>
+                      )}
+                      {stopLinePercent === null && (
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                          <span className="bg-black/70 text-white text-xs px-3 py-2 rounded-full">Click on image to set stop line</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 ) : (
                   <p className="text-slate-400 flex items-center justify-center gap-2">
                     <Upload className="w-4 h-4" /> Upload CCTV .mp4 or image to begin analysis
@@ -280,7 +338,9 @@ function App() {
                 violations.map((v, i) => (
                   <div key={i} className="bg-slate-700/50 rounded-lg p-4 border-l-4 border-red-500">
                     <div className="flex justify-between items-start mb-2">
-                      <span className="bg-red-500/20 text-red-300 text-xs font-bold px-2 py-1 rounded uppercase tracking-wider">{v.violation_type}</span>
+                      <span className="bg-red-500/20 text-red-300 text-xs font-bold px-2 py-1 rounded uppercase tracking-wider">
+                        {v.violation_type} {v.violation_type === 'Seatbelt Non-compliance' && <span className="ml-2 bg-yellow-500/20 text-yellow-500 px-1 py-0.5 rounded text-[10px]">[BETA]</span>}
+                      </span>
                       <span className={`text-xs font-bold px-2 py-1 rounded ${severityColor(v.severity)}`}>{v.severity}</span>
                     </div>
                     <div className="font-mono text-lg text-white mb-1 font-semibold">{v.plate_number}</div>
@@ -361,6 +421,23 @@ function App() {
               ) : (
                 <div className="text-slate-500 flex-1 flex items-center justify-center">No data available</div>
               )}
+            </div>
+          </div>
+
+          <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 h-96 flex flex-col mt-8">
+            <h3 className="text-lg font-semibold text-white mb-4">Precision / Recall Benchmarks</h3>
+            <div className="flex-1 min-h-0 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={prData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <XAxis dataKey="name" stroke="#94a3b8" tick={{fontSize: 12}} />
+                  <YAxis stroke="#94a3b8" domain={[0, 1]} />
+                  <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px', color: '#fff' }} />
+                  <Legend />
+                  <Line type="monotone" dataKey="precision" name="Precision" stroke="#10b981" strokeWidth={2} activeDot={{ r: 8 }} />
+                  <Line type="monotone" dataKey="recall" name="Recall" stroke="#3b82f6" strokeWidth={2} activeDot={{ r: 8 }} />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
           </div>
         </div>

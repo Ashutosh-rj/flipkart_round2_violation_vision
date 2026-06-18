@@ -12,7 +12,18 @@ import logging
 
 import models
 from database import engine, get_db
-from ml_pipeline import process_video_real, process_image_real
+from ml_pipeline import VideoIngestionEngine
+from celery_app import process_video_task
+import json
+import redis.asyncio as aioredis
+
+engine_instance = None
+
+def get_engine():
+    global engine_instance
+    if engine_instance is None:
+        engine_instance = VideoIngestionEngine()
+    return engine_instance
 from config import CORS_ORIGINS
 
 models.Base.metadata.create_all(bind=engine)
@@ -20,6 +31,25 @@ models.Base.metadata.create_all(bind=engine)
 logger = logging.getLogger("violationvision")
 
 app = FastAPI(title="ViolationVision MVP API")
+
+redis_task = None
+@app.on_event("startup")
+async def startup_event():
+    global redis_task
+    redis_task = asyncio.create_task(redis_listener())
+
+async def redis_listener():
+    redis_url = os.getenv("REDIS_URL", "redis://redis:6379/1")
+    r = aioredis.from_url(redis_url)
+    pubsub = r.pubsub()
+    await pubsub.subscribe("ws_events")
+    async for message in pubsub.listen():
+        if message["type"] == "message":
+            try:
+                data = json.loads(message["data"])
+                await manager.broadcast(data)
+            except Exception as e:
+                logger.error(f"Error parsing redis message: {e}")
 
 # Configure CORS — origins come from config (env-var backed)
 app.add_middleware(
@@ -63,29 +93,28 @@ app.mount("/api/images", StaticFiles(directory="uploads"), name="images")
 _background_tasks: set[asyncio.Task] = set()
 
 @app.post("/api/upload-video")
-async def upload_video(file: UploadFile = File(...), stop_line_y: int = Form(None)):
+async def upload_video(file: UploadFile = File(...), stop_line_y: int = Form(None), camera_id: str = Form("cam_01")):
     file_location = f"uploads/{file.filename}"
 
     # Chunked file copy to avoid loading entire video into RAM
     with open(file_location, "wb") as file_object:
         shutil.copyfileobj(file.file, file_object)
 
-    # Start background processing — store task reference to prevent GC
-    task = asyncio.create_task(process_video_real(file_location, manager, stop_line_y))
-    _background_tasks.add(task)
-    task.add_done_callback(_background_tasks.discard)
+    # Dispatch background processing to Celery worker queue
+    process_video_task.delay(file_location, stop_line_y, camera_id)
 
-    return {"info": f"file '{file.filename}' saved and processing started."}
+    return {"info": f"file '{file.filename}' saved and dispatched to worker queue."}
 
 @app.post("/api/upload-image")
-async def upload_image(file: UploadFile = File(...), stop_line_y: int = Form(None)):
+async def upload_image(file: UploadFile = File(...), stop_line_y: int = Form(None), camera_id: str = Form("cam_01")):
     file_location = f"uploads/{file.filename}"
 
     with open(file_location, "wb") as file_object:
         shutil.copyfileobj(file.file, file_object)
 
     # Images process synchronously and return violations immediately
-    violations = await process_image_real(file_location, stop_line_y)
+    engine_inst = get_engine()
+    violations = await engine_inst.process_image_real(file_location, stop_line_y, camera_id)
     return {"info": f"file '{file.filename}' processed.", "violations": violations}
 
 @app.websocket("/ws/alerts")
@@ -140,11 +169,11 @@ def export_violations_csv(db: Session = Depends(get_db)):
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["ID", "Timestamp", "Violation Type", "Severity", "Rider Count",
+    writer.writerow(["ID", "Camera ID", "Timestamp", "Violation Type", "Severity", "Rider Count",
                       "Plate Number", "Confidence", "Image URL"])
 
     for v in violations:
-        writer.writerow([v.id, v.timestamp, v.violation_type, v.severity,
+        writer.writerow([v.id, v.camera_id, v.timestamp, v.violation_type, v.severity,
                           v.rider_count, v.plate_number, v.confidence, v.image_url])
 
     output.seek(0)

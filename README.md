@@ -32,6 +32,27 @@ Built for high-performance and real-time processing, the platform features a hig
 
 ---
 
+## 📸 Sample Detections & Evidence
+
+*(Insert screenshots of the dashboard and sample annotated violation evidence here)*
+
+---
+
+## 📊 Model Accuracy & Benchmarks
+
+| Violation Type | Detection Method | Estimated Accuracy | Notes |
+|---|---|---|---|
+| **Triple Riding** | Spatial IoA Geometry | 75-85% | Highly robust under top-down CCTV angles |
+| **Stop-line Violation** | Line Crossing Geometry | 85-90% | Includes visual calibration drag-tool in UI |
+| **Illegal Parking** | Spatiotemporal Stationarity| 80-90% | Triggers after 5s configurable duration |
+| **Wrong-side Driving** | Dynamic Flow Accumulation | 70-80% | Auto-adapts to traffic flow without configuration |
+| **Helmet Non-compliance**| Color/Intensity Heuristic | ~65% | *MVP Heuristic — Production requires fine-tuned CNN* |
+| **Seatbelt Non-compliance**| HoughLines Heuristic | ~40% | *Beta MVP — Production requires YOLO crop classifier* |
+
+*Note: The current MVP relies on some heuristics to demonstrate the full end-to-end pipeline (ingestion → ML processing → WebSocket → Dashboard). A production deployment will replace these heuristics with fine-tuned models trained on the Indian Driving Dataset (IDD).*
+
+---
+
 ## 🏗️ Architecture
 
 1.  **Frontend (React + Vite + TailwindCSS)**: 

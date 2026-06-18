@@ -7,6 +7,7 @@ class ViolationRecord(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    camera_id = Column(String, index=True, default="cam_01")
     violation_type = Column(String, index=True)
     severity = Column(String, index=True)
     rider_count = Column(Integer)

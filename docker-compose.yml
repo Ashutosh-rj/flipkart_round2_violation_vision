@@ -13,11 +13,78 @@ services:
       - ./backend/paddleocr_models:/root/.paddleocr
     environment:
       - PYTHONUNBUFFERED=1
-      - DATABASE_URL=sqlite:///./data/sql_app.db
+      - DATABASE_URL=postgresql://violation_user:violation_pass@db:5432/violation_db
       - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
       - YOLO_MODEL_PATH=yolov8n.pt
       - YOLO_CONF_THRESHOLD=0.25
       - VIOLATION_COOLDOWN=30.0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - REDIS_URL=redis://redis:6379/1
+#    deploy:
+#      resources:
+#        reservations:
+#          devices:
+#            - driver: nvidia
+#              count: 1
+#              capabilities: [gpu]
+    # NOTE: If you are running on a CPU-only laptop, comment out the `deploy` block above.
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A celery_app.celery worker --loglevel=info -c 1
+    volumes:
+      - ./backend/data:/app/data
+      - ./backend/uploads:/app/uploads
+      - ./backend/paddleocr_models:/root/.paddleocr
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DATABASE_URL=postgresql://violation_user:violation_pass@db:5432/violation_db
+      - YOLO_MODEL_PATH=yolov8n.pt
+      - YOLO_CONF_THRESHOLD=0.25
+      - VIOLATION_COOLDOWN=30.0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - REDIS_URL=redis://redis:6379/1
+#    deploy:
+#      resources:
+#        reservations:
+#          devices:
+#            - driver: nvidia
+#              count: 1
+#              capabilities: [gpu]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  db:
+    image: postgres:15-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: violation_user
+      POSTGRES_PASSWORD: violation_pass
+      POSTGRES_DB: violation_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U violation_user -d violation_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   frontend:
     build:
@@ -29,3 +96,6 @@ services:
       - "3000:80"
     depends_on:
       - api
+
+volumes:
+  postgres_data:
