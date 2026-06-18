@@ -68,3 +68,8 @@ venv.bak/
 backend/uploads/
 backend/data/
 frontend/dist/
+
+# Machine Learning Models
+*.pt
+paddleocr_models/
+__pycache__/
