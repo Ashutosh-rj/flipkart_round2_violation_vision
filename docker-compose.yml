@@ -14,7 +14,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - DATABASE_URL=postgresql://violation_user:violation_pass@db:5432/violation_db
-      - CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+      - CORS_ORIGINS=http://localhost:3000,http://localhost:5173,https://explains-shipments-gst-supported.trycloudflare.com
       - YOLO_MODEL_PATH=yolov8n.pt
       - YOLO_CONF_THRESHOLD=0.25
       - VIOLATION_COOLDOWN=30.0
@@ -91,7 +91,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        - VITE_API_BASE_URL=http://localhost:8000
+        - VITE_API_BASE_URL=https://hayes-css-followed-backgrounds.trycloudflare.com
     ports:
       - "3000:80"
     depends_on:

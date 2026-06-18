@@ -47,6 +47,16 @@ def auto_gamma_correction(image):
     
     return cv2.LUT(image, table)
 
+def reduce_motion_blur(image):
+    """
+    Applies a sharpening filter to reduce the effects of motion blur,
+    which is common in fast-moving traffic footage.
+    """
+    kernel = np.array([[-1, -1, -1],
+                       [-1,  9, -1],
+                       [-1, -1, -1]])
+    return cv2.filter2D(image, -1, kernel)
+
 def preprocess_frame(frame, target_size=YOLO_INPUT_SIZE):
     """
     Full preprocessing pipeline for a single frame.
@@ -54,10 +64,13 @@ def preprocess_frame(frame, target_size=YOLO_INPUT_SIZE):
     # 1. Resize for YOLO
     resized = cv2.resize(frame, target_size)
 
-    # 2. Auto-Gamma Correction (Adaptable Lighting)
-    gamma_corrected = auto_gamma_correction(resized)
+    # 2. Reduce Motion Blur (Sharpening)
+    sharpened = reduce_motion_blur(resized)
 
-    # 3. Low-light enhancement (CLAHE)
+    # 3. Auto-Gamma Correction (Adaptable Lighting)
+    gamma_corrected = auto_gamma_correction(sharpened)
+
+    # 4. Low-light enhancement (CLAHE)
     enhanced = apply_clahe(gamma_corrected)
 
     return enhanced, resized

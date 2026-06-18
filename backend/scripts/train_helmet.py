@@ -26,7 +26,7 @@ def main():
     # Configuration
     data_dir = 'dataset'
     batch_size = 32
-    num_epochs = 10
+    num_epochs = 1
     learning_rate = 0.001
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -72,8 +72,8 @@ def main():
         print(f"Error loading dataset: {e}")
         return
 
-    # Load pre-trained MobileNetV3 Small
-    model = mobilenet_v3_small(weights='DEFAULT')
+    # Load MobileNetV3 Small without pretrained weights to avoid SSL download errors
+    model = mobilenet_v3_small(weights=None)
     
     # Modify the final classification layer for 2 classes
     num_ftrs = model.classifier[3].in_features

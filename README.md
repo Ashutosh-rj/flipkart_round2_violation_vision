@@ -23,7 +23,7 @@ Built for high-performance and real-time processing, the platform features a hig
     5. Red-light Violation
     6. Stop-line Violation
     7. Illegal Parking
-*   **Auto-Adaptive Intelligence**: Features dynamic auto-gamma correction for extreme lighting/weather, and crowd-sourced vehicle flow tracking to automatically learn the correct driving direction of any road without manual configuration.
+*   **Auto-Adaptive Intelligence**: Features dynamic auto-gamma correction and CLAHE primarily for exposure and low-light enhancement, and crowd-sourced vehicle flow tracking to automatically learn the correct driving direction of any road without manual configuration.
 *   **Intelligent Object Tracking**: Deep tracking to ensure the exact same vehicle isn't flagged multiple times within a 30-second cooldown window (tracked per-vehicle).
 *   **License Plate Extraction**: Integrated to crop, scan, and extract plates using OCR techniques.
 *   **Live Dashboard**: A stunning React + TailwindCSS dashboard connected via WebSockets to instantly stream violations directly to the operator's screen as they happen.
