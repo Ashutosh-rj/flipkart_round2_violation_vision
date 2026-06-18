@@ -24,6 +24,29 @@ def apply_clahe(image):
     final = cv2.cvtColor(limg, cv2.COLOR_LAB2BGR)
     return final
 
+def auto_gamma_correction(image):
+    """
+    Automatically adjust the gamma of an image based on its average brightness.
+    This makes the pipeline adaptable to bright sunlight or dark night conditions.
+    """
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    mean_brightness = np.mean(gray)
+    
+    # Target brightness (127 is mid-gray)
+    target_brightness = 127.0
+    
+    # Calculate gamma
+    # If image is dark (mean < 127), gamma < 1 (brightens image)
+    # If image is bright (mean > 127), gamma > 1 (darkens image)
+    # We clip gamma to prevent extreme washouts
+    gamma = np.log(target_brightness / 255.0) / np.log(max(mean_brightness, 1) / 255.0)
+    gamma = np.clip(gamma, 0.4, 2.5)
+    
+    inv_gamma = 1.0 / gamma
+    table = np.array([((i / 255.0) ** inv_gamma) * 255 for i in np.arange(0, 256)]).astype("uint8")
+    
+    return cv2.LUT(image, table)
+
 def preprocess_frame(frame, target_size=YOLO_INPUT_SIZE):
     """
     Full preprocessing pipeline for a single frame.
@@ -31,7 +54,10 @@ def preprocess_frame(frame, target_size=YOLO_INPUT_SIZE):
     # 1. Resize for YOLO
     resized = cv2.resize(frame, target_size)
 
-    # 2. Low-light enhancement (CLAHE)
-    enhanced = apply_clahe(resized)
+    # 2. Auto-Gamma Correction (Adaptable Lighting)
+    gamma_corrected = auto_gamma_correction(resized)
+
+    # 3. Low-light enhancement (CLAHE)
+    enhanced = apply_clahe(gamma_corrected)
 
     return enhanced, resized

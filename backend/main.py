@@ -12,7 +12,7 @@ import logging
 
 import models
 from database import engine, get_db
-from ml_pipeline import process_video_real
+from ml_pipeline import process_video_real, process_image_real
 from config import CORS_ORIGINS
 
 models.Base.metadata.create_all(bind=engine)
@@ -76,6 +76,17 @@ async def upload_video(file: UploadFile = File(...)):
     task.add_done_callback(_background_tasks.discard)
 
     return {"info": f"file '{file.filename}' saved and processing started."}
+
+@app.post("/api/upload-image")
+async def upload_image(file: UploadFile = File(...)):
+    file_location = f"uploads/{file.filename}"
+
+    with open(file_location, "wb") as file_object:
+        shutil.copyfileobj(file.file, file_object)
+
+    # Images process synchronously and return violations immediately
+    violations = await process_image_real(file_location)
+    return {"info": f"file '{file.filename}' processed.", "violations": violations}
 
 @app.websocket("/ws/alerts")
 async def websocket_endpoint(websocket: WebSocket):
@@ -142,3 +153,17 @@ def export_violations_csv(db: Session = Depends(get_db)):
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=violations_report.csv"}
     )
+
+@app.get("/api/benchmarks")
+def get_benchmarks():
+    """Return mock benchmark metrics for the evaluation page."""
+    return {
+        "mAP_50": 87.4,
+        "mAP_50_95": 62.1,
+        "precision": 89.2,
+        "recall": 85.7,
+        "f1_score": 87.4,
+        "fps_video": 34.2,
+        "processing_time_per_image_ms": 112
+    }
+

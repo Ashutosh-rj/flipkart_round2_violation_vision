@@ -13,11 +13,14 @@ CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
 
 # ── YOLO Model ────────────────────────────────────────────────────────
 YOLO_MODEL_PATH = os.getenv("YOLO_MODEL_PATH", "yolov8n.pt")
-YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("YOLO_CONF_THRESHOLD", "0.4"))
+YOLO_CONFIDENCE_THRESHOLD = float(os.getenv("YOLO_CONF_THRESHOLD", "0.2"))
 
 # COCO class IDs used by the pipeline
 COCO_PERSON_CLASS = 0
+COCO_CAR_CLASS = 2
 COCO_MOTORCYCLE_CLASS = 3
+COCO_BUS_CLASS = 5
+COCO_TRUCK_CLASS = 7
 
 # ── Preprocessing ─────────────────────────────────────────────────────
 YOLO_INPUT_SIZE = (640, 640)
@@ -40,6 +43,12 @@ SPATIAL_VERTICAL_TOLERANCE_FRACTION = 0.3
 # Must be long enough that a vehicle fully exits the camera's field of view.
 VIOLATION_COOLDOWN_SECONDS = float(os.getenv("VIOLATION_COOLDOWN", "30.0"))
 
+# Time in seconds a vehicle must be stationary to be considered illegally parked
+PARKING_TIME_THRESHOLD = 5.0
+
+# Minimum confidence for mock helmet detection heuristic
+HELMET_CONFIDENCE_THRESHOLD = 0.5
+
 # ── Severity Classification ──────────────────────────────────────────
 # rider_count >= this ⇒ CRITICAL
 SEVERITY_CRITICAL_RIDER_COUNT = 4
@@ -50,3 +59,12 @@ SEVERITY_MAJOR_CONFIDENCE = 0.7
 # ── Frame Sampling ────────────────────────────────────────────────────
 # Target frames per second to process (independent of source FPS)
 TARGET_PROCESSING_FPS = 3
+
+# ── Virtual Traffic Environment (Hackathon Mock Constants) ───────────
+# For Stop-line and Red-light violations
+STOP_LINE_Y = 400
+TRAFFIC_LIGHT_STATE = os.getenv("TRAFFIC_LIGHT_STATE", "RED") # RED or GREEN
+
+# For Wrong-side driving
+# "down" means vehicles should move from top (low Y) to bottom (high Y).
+TRAFFIC_FLOW_DIRECTION = os.getenv("TRAFFIC_FLOW_DIRECTION", "down") 
