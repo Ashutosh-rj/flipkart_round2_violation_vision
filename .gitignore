@@ -69,7 +69,12 @@ backend/uploads/
 backend/data/
 frontend/dist/
 
-# Machine Learning Models
-*.pt
-paddleocr_models/
+# ML Models
+backend/yolov8n.pt
+backend/paddleocr_models/
 __pycache__/
+
+# OCR files
+*.pdmodel
+*.pdiparams
+*.tar
