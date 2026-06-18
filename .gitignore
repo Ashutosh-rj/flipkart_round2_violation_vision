@@ -82,6 +82,3 @@ __pycache__/
 
 # Binaries
 cloudflared.exe
-
-# Backups
-backend/ml_pipeline_backup.py
